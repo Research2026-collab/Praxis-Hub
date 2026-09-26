@@ -121,7 +121,7 @@ body { font-family: -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; 
 
 <script>
 // Nach dem Deployment die exec-URL der Apps-Script-Web-App hier eintragen.
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9Q1tJAzkP1quxj5tYoyU63D6PFAvp-VD-36oQn5D2jXzVDBlm-sZyY8vWbmbwZgOBQ/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzwuxzv52B1KyDZLC-HmVWqhrs_kGjToedaWHvsNzTtaq2zk7179-NkwaSXddJWcQXQXg/exec';
 
 let WERTELISTEN = {};
 let BEITRAEGE = [];
@@ -331,11 +331,29 @@ function renderBadgeListe(auswertung) {
     </div>`;
 }
 
+function loadJsonp(action) {
+  return new Promise((resolve, reject) => {
+    const callbackName = '__praxishub_' + action + '_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => cleanup(new Error(action + ': Zeitüberschreitung beim Laden')), 15000);
+    function cleanup(err, data) {
+      clearTimeout(timer);
+      delete window[callbackName];
+      script.remove();
+      err ? reject(err) : resolve(data);
+    }
+    window[callbackName] = data => cleanup(null, data);
+    script.onerror = () => cleanup(new Error(action + ': API-Antwort konnte nicht geladen werden'));
+    script.src = APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action) + '&callback=' + encodeURIComponent(callbackName);
+    document.head.appendChild(script);
+  });
+}
+
 Promise.all([
-  fetch(APPS_SCRIPT_URL + '?action=wertelisten').then(r => r.json()),
-  fetch(APPS_SCRIPT_URL + '?action=list').then(r => r.json()),
-  fetch(APPS_SCRIPT_URL + '?action=badges').then(r => r.json()),
-  fetch(APPS_SCRIPT_URL + '?action=einrichtungen').then(r => r.json())
+  loadJsonp('wertelisten'),
+  loadJsonp('list'),
+  loadJsonp('badges'),
+  loadJsonp('einrichtungen')
 ]).then(([wertelisten, beitraege, badges, einrichtungen]) => {
   WERTELISTEN = wertelisten;
   BEITRAEGE = beitraege;
@@ -343,8 +361,14 @@ Promise.all([
   fillSelect('f_umsetzungsstand', wertelisten['Umsetzungsstand'], 'Alle Umsetzungsstände');
   fillSelect('f_zielgruppe', wertelisten['Zielgruppe'], 'Zielgruppe: alle');
   fillSelect('f_materialformat', wertelisten['Materialformat'], 'Materialformat: alle');
-  fillSelect('f_teilnahmeform', wertelisten['Teilnahmeform'], 'Teilnahmeform: alle');
-  fillSelect('f_format', wertelisten['Format'], 'Format: alle');
+
+  const standardTeilnahmeformen = ['Präsenz', 'Online', 'Hybrid'];
+  const teilnahmeformen = (wertelisten['Teilnahmeform'] && wertelisten['Teilnahmeform'].length)
+    ? wertelisten['Teilnahmeform']
+    : standardTeilnahmeformen.filter(v => (wertelisten['Format'] || []).includes(v));
+  fillSelect('f_teilnahmeform', teilnahmeformen.length ? teilnahmeformen : standardTeilnahmeformen, 'Teilnahmeform: alle');
+  fillSelect('f_format', (wertelisten['Format'] || []).filter(v => !standardTeilnahmeformen.includes(v)), 'Format: alle');
+
   fillSelect('f_sprachebene', wertelisten['Sprachebene'], 'Sprachebene: alle');
   fillSelect('f_aufwand', wertelisten['Aufwand'], 'Aufwand: alle');
   fillSelect('f_kostenrahmen_nachnutzung', wertelisten['Kostenrahmen für Nachnutzung'], 'Kostenrahmen für Nachnutzung: alle');
@@ -353,11 +377,13 @@ Promise.all([
   fillSelect('f_einrichtung', einrichtungen, 'Einrichtung: alle');
   fillSelect('f_uebertragbarkeit', wertelisten['Übertragbarkeit'], 'Übertragbarkeit: alle');
   fillSelect('f_voraussetzungen', wertelisten['Voraussetzungen'], 'Voraussetzungen: alle');
-  renderBadgeListe(badges);
-  applyFilters();
-}).catch(() => {
+  renderGallery();
+  renderBadges(badges);
+}).catch(err => {
+  console.error('[PraxisHub] Whiteboard konnte nicht geladen werden:', err);
   document.getElementById('gallery').innerHTML =
-    '<div class="empty-state">Die Beiträge konnten nicht geladen werden. Ist die APPS_SCRIPT_URL korrekt hinterlegt?</div>';
+    '<div class="empty-state">Die Beiträge konnten nicht geladen werden.<br><strong>Technischer Fehler:</strong> ' +
+    String(err.message || err).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
 });
 </script>
 </body>

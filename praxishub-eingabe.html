@@ -68,7 +68,7 @@ textarea { min-height:70px; resize:vertical; }
 
 <script>
 // Nach dem Deployment die exec-URL der Apps-Script-Web-App hier eintragen.
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9Q1tJAzkP1quxj5tYoyU63D6PFAvp-VD-36oQn5D2jXzVDBlm-sZyY8vWbmbwZgOBQ/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzwuxzv52B1KyDZLC-HmVWqhrs_kGjToedaWHvsNzTtaq2zk7179-NkwaSXddJWcQXQXg/exec';
 
 const MEHRFACHAUSWAHL_FELDER = ['Zielgruppe', 'Voraussetzungen', 'Format'];
 let BEKANNTE_EINRICHTUNGEN = [];
@@ -115,6 +115,15 @@ function textFieldMitVorschlag(id, label, required, hint, listId, vorschlaege) {
 
 function renderForm() {
   const w = WERTELISTEN;
+
+  // Teilnahmeform und Format sauber trennen. Falls die Werteliste Teilnahmeform
+  // leer ist, werden Präsenz/Online/Hybrid aus Format übernommen.
+  const standardTeilnahmeformen = ['Präsenz', 'Online', 'Hybrid'];
+  const teilnahmeformen = (w['Teilnahmeform'] && w['Teilnahmeform'].length)
+    ? w['Teilnahmeform']
+    : standardTeilnahmeformen.filter(v => (w['Format'] || []).includes(v));
+  const sichereTeilnahmeformen = teilnahmeformen.length ? teilnahmeformen : standardTeilnahmeformen;
+  const formate = (w['Format'] || []).filter(v => !standardTeilnahmeformen.includes(v));
   const area = document.getElementById('formArea');
   area.innerHTML = `
     <h2 style="font-size:20px; font-weight:800; color:var(--navy); margin-bottom:4px;">Neuen Beitrag einstellen</h2>
@@ -143,8 +152,8 @@ function renderForm() {
     ${textField('n_url', 'URL', false, 'https://...')}
 
     <div class="form-section-title">Umsetzung</div>
-    ${selectField('n_teilnahmeform', 'Teilnahmeform', w['Teilnahmeform'], false)}
-    ${checkGroup('n_format', 'Format', 'Mehrfachauswahl möglich', w['Format'])}
+    ${selectField('n_teilnahmeform', 'Teilnahmeform', sichereTeilnahmeformen, false)}
+    ${checkGroup('n_format', 'Format', 'Mehrfachauswahl möglich', formate)}
     ${textField('n_dauer', 'Dauer', false, 'z. B. 90 Minuten')}
     ${textField('n_gruppengroesse', 'Gruppengröße', false, 'z. B. 8–12 Personen')}
     ${selectField('n_aufwand', 'Aufwand', w['Aufwand'], false)}
