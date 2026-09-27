@@ -377,7 +377,7 @@ function submitBeitrag() {
   kontaktSpeichern();
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
-  status.textContent = 'Speichern läuft …';
+  status.textContent = 'Dein Beitrag wird gespeichert …';
   status.className = 'status-msg';
 
   // Übermittlung ohne fetch/CORS: klassisches HTML-POST in ein unsichtbares Iframe.
@@ -400,29 +400,51 @@ function submitBeitrag() {
   form.appendChild(payload);
   document.body.appendChild(form);
 
-  const timeout = setTimeout(() => {
-    window.removeEventListener('message', onPraxisHubPostMessage);
-    status.textContent = 'Die Übermittlung wurde gestartet, eine Bestätigung ist jedoch ausgeblieben. Bitte prüfe den Beitrag im Whiteboard.';
-    status.className = 'status-msg err';
-    btn.disabled = false;
-    form.remove(); iframe.remove();
-  }, 15000);
+  // Die Bestätigung per postMessage erreicht die Seite nicht in jedem Browser zuverlässig,
+  // weil Apps Script seine Antwort in weitere Iframes verpackt. Deshalb prüft die Seite
+  // zusätzlich selbst, ob der Beitrag in der Beitragsliste angekommen ist.
+  let erledigt = false;
+  const gesuchterTitel = normal(data['Titel']);
+  const bekannteTreffer = BESTEHENDE_TITEL.filter(b => normal(b.Titel) === gesuchterTitel).length;
 
-  function onPraxisHubPostMessage(event) {
-    if (!event.data || event.data.source !== 'praxishub') return;
-    clearTimeout(timeout);
+  function abschliessen(ok, meldung) {
+    if (erledigt) return;
+    erledigt = true;
+    clearTimeout(sicherheitsnetz);
     window.removeEventListener('message', onPraxisHubPostMessage);
     form.remove(); iframe.remove();
-    if (event.data.status === 'ok') {
+    if (ok) {
       BESTEHENDE_TITEL.push({ Titel: data['Titel'] });
-      status.textContent = 'Danke! Der Beitrag wurde gespeichert und erscheint jetzt im Whiteboard.';
+      status.textContent = 'Danke! Dein Beitrag ist gespeichert und im Whiteboard zu finden.';
       status.className = 'status-msg ok';
-      setTimeout(() => { renderForm(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, 1500);
+      setTimeout(() => { renderForm(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, 2500);
     } else {
-      status.textContent = 'Das hat nicht geklappt (' + (event.data.message || 'Unbekannter Fehler') + '). Bitte erneut versuchen.';
+      status.innerHTML = meldung;
       status.className = 'status-msg err';
       btn.disabled = false;
     }
+  }
+
+  function inListePruefen(versuch) {
+    if (erledigt) return;
+    loadJsonp('list').then(liste => {
+      const treffer = (Array.isArray(liste) ? liste : []).filter(b => normal(b.Titel) === gesuchterTitel).length;
+      if (treffer > bekannteTreffer) abschliessen(true);
+      else if (versuch < 4) setTimeout(() => inListePruefen(versuch + 1), 2500);
+    }).catch(() => { if (versuch < 4) setTimeout(() => inListePruefen(versuch + 1), 2500); });
+  }
+
+  // Sobald die Antwort des Servers im unsichtbaren Iframe geladen ist, wird nachgesehen.
+  iframe.addEventListener('load', () => setTimeout(() => inListePruefen(1), 800));
+
+  const sicherheitsnetz = setTimeout(() => abschliessen(false,
+    'Der Beitrag ließ sich noch nicht im Whiteboard finden. Bitte sieh dort in ein bis zwei Minuten nach, bevor Du ihn erneut abschickst, damit er nicht doppelt erscheint. <a href="praxishub-whiteboard.html" target="_blank">Whiteboard öffnen</a>'
+  ), 30000);
+
+  function onPraxisHubPostMessage(event) {
+    if (!event.data || event.data.source !== 'praxishub') return;
+    if (event.data.status === 'ok') abschliessen(true);
+    else abschliessen(false, 'Das hat nicht geklappt (' + esc(event.data.message || 'Unbekannter Fehler') + '). Bitte versuche es erneut.');
   }
 
   window.addEventListener('message', onPraxisHubPostMessage);
