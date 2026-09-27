@@ -378,7 +378,7 @@ Promise.all([
   fillSelect('f_uebertragbarkeit', wertelisten['Übertragbarkeit'], 'Übertragbarkeit: alle');
   fillSelect('f_voraussetzungen', wertelisten['Voraussetzungen'], 'Voraussetzungen: alle');
   renderGallery();
-  renderBadges(badges);
+  renderBadgeListe(badges);
 }).catch(err => {
   console.error('[PraxisHub] Whiteboard konnte nicht geladen werden:', err);
   document.getElementById('gallery').innerHTML =
