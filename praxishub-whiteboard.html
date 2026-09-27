@@ -355,8 +355,18 @@ Promise.all([
   loadJsonp('badges'),
   loadJsonp('einrichtungen')
 ]).then(([wertelisten, beitraege, badges, einrichtungen]) => {
-  WERTELISTEN = wertelisten;
-  BEITRAEGE = beitraege;
+  console.info('[PraxisHub] Rohantwort list:', beitraege);
+  console.info('[PraxisHub] Rohantwort badges:', badges);
+  if (!Array.isArray(beitraege)) {
+    throw new Error('?action=list liefert kein Array, sondern: ' + JSON.stringify(beitraege).slice(0, 300));
+  }
+  WERTELISTEN = wertelisten || {};
+  // Spaltenüberschriften mit versehentlichen Leerzeichen („Titel “) vereinheitlichen.
+  BEITRAEGE = beitraege.map(b => {
+    const n = {};
+    Object.keys(b || {}).forEach(k => { n[String(k).trim()] = b[k]; });
+    return n;
+  });
   fillSelect('f_hauptbereich', wertelisten['Hauptbereich'], 'Hauptbereich: alle');
   fillSelect('f_umsetzungsstand', wertelisten['Umsetzungsstand'], 'Alle Umsetzungsstände');
   fillSelect('f_zielgruppe', wertelisten['Zielgruppe'], 'Zielgruppe: alle');
@@ -380,6 +390,16 @@ Promise.all([
   AKTUELLE_ANSICHT = BEITRAEGE.slice();
   applyFilters();
   renderBadgeListe(badges);
+
+  // Widerspruch zwischen Rangliste und Beitragsliste sichtbar machen, statt still „0 gefunden“ zu zeigen.
+  const gezaehlt = ((badges && badges.impulsstark) || []).reduce((s, e) => s + (Number(e['Anzahl Beiträge']) || 0), 0);
+  if (!BEITRAEGE.length && gezaehlt > 0) {
+    document.getElementById('gallery').innerHTML =
+      '<div class="empty-state"><strong>Datenfehler:</strong> Die Auswertung zählt ' + gezaehlt +
+      ' Beiträge, die Schnittstelle <code>?action=list</code> liefert jedoch 0. ' +
+      'Vermutlich läuft unter der /exec-Adresse noch eine ältere Version von Code.gs. ' +
+      'In Apps Script unter Bereitstellen › Bereitstellungen verwalten › Bearbeiten die Version „Neue Version“ wählen und bereitstellen.</div>';
+  }
 }).catch(err => {
   console.error('[PraxisHub] Whiteboard konnte nicht geladen werden:', err);
   document.getElementById('gallery').innerHTML =
